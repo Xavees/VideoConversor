@@ -1,9 +1,24 @@
 import { Request, Response } from "express";
 import path from "node:path";
 import fs from "node:fs";
+
 import { convertToMp4 } from "../services/ffmpegService";
 
-export async function convertVideo(req: Request, res: Response) {
+function deleteFile(filePath: string) {
+    fs.unlink(filePath, (error) => {
+        if (error && error.code !== "ENOENT") {
+            console.error(
+                `Erro ao apagar arquivo ${filePath}:`,
+                error
+            );
+        }
+    });
+}
+
+export async function convertVideo(
+    req: Request,
+    res: Response
+) {
 
     if (!req.file) {
         return res.status(400).json({
@@ -28,23 +43,34 @@ export async function convertVideo(req: Request, res: Response) {
             outputPath
         );
 
-        res.download(outputPath, outputName, (error) => {
+        return res.download(
+            outputPath,
+            outputName,
+            (e:any) => {
 
-            fs.unlink(inputPath, () => {});
-            fs.unlink(outputPath, () => {});
+                deleteFile(inputPath);
+                deleteFile(outputPath);
 
-            if (error) {
-                console.error(error);
+                if (e) {
+                    console.error(
+                        "Erro ao enviar arquivo:", e
+                        
+                    );
+                }
             }
-
-        });
+        );
 
     } catch (e:any) {
-    console.error("ERRO NA CONVERSÃO:", e);
 
-    fs.unlink(inputPath, () => {});
+        console.error(
+            "ERRO NA CONVERSÃO:", e
+        );
 
-    return res.status(500).json({
-        error: "Não foi possível converter o vídeo."
-    });
-}}
+        deleteFile(inputPath);
+        deleteFile(outputPath);
+
+        return res.status(500).json({
+            e: "Não foi possível converter o vídeo."
+        });
+    }
+}
