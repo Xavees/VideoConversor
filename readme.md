@@ -95,4 +95,5 @@ O projeto também será utilizado como forma de aprofundar conhecimentos em **Ty
 
 ---
 
-Desenvolvido por **Luis Fernando Almeida de Oliveira**.
+Desenvolvido por **Xavees**.
+
