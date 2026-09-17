@@ -7,70 +7,150 @@ import { convertToMp4 } from "../services/ffmpegService";
 function deleteFile(filePath: string) {
     fs.unlink(filePath, (error) => {
         if (error && error.code !== "ENOENT") {
-            console.error(
-                `Erro ao apagar arquivo ${filePath}:`,
-                error
-            );
+            console.error(`Erro ao apagar ${filePath}:`, error);
         }
     });
 }
 
-export async function convertVideo(
+
+const FILE_EXPIRATION_TIME = 30 * 60 * 1000; // 30 minutos
+
+function scheduleFileDeletion(filePath: string) {
+    setTimeout(() => {
+        deleteFile(filePath);
+
+        console.log(
+            `Arquivo expirado e removido: ${filePath}`
+        );
+    }, FILE_EXPIRATION_TIME);
+}
+
+
+
+export async function convertVideos(
     req: Request,
     res: Response
 ) {
+    const files = req.files as Express.Multer.File[];
 
-    if (!req.file) {
+    if (!files || files.length === 0) {
         return res.status(400).json({
             error: "Nenhum vídeo enviado."
         });
     }
 
-    const inputPath = req.file.path;
-
-    const outputName =
-        `${Date.now()}-${path.parse(req.file.originalname).name}.mp4`;
-
-    const outputPath = path.join(
-        "converted",
-        outputName
-    );
+    const convertedFiles: {
+        path: string;
+        name: string;
+        storedName: string;
+    }[] = [];
 
     try {
+        // Converte um vídeo de cada vez.
+        for (const file of files) {
+            const originalName =
+                path.parse(file.originalname).name;
 
-        await convertToMp4(
-            inputPath,
-            outputPath
-        );
+            const storedName =
+                `${Date.now()}-${originalName}.mp4`;
 
-        return res.download(
-            outputPath,
-            outputName,
-            (e:any) => {
+            const outputPath = path.join(
+                "converted",
+                storedName
+            );
 
-                deleteFile(inputPath);
-                deleteFile(outputPath);
+            console.log(
+                `Convertendo ${file.originalname}...`
+            );
 
-                if (e) {
-                    console.error(
-                        "Erro ao enviar arquivo:", e
-                        
-                    );
-                }
-            }
-        );
+            await convertToMp4(
+    file.path,
+    outputPath
+);
 
-    } catch (e:any) {
+        convertedFiles.push({
+             path: outputPath,
+             name: `${originalName}.mp4`,
+             storedName
+});
 
+// MPG original não é mais necessário
+        deleteFile(file.path);
+
+// MP4 fica disponível temporariamente
+
+     scheduleFileDeletion(outputPath);
+            console.log(
+                `${file.originalname} convertido!`
+            );
+        }
+
+        return res.status(200).json({
+            message: "Conversão concluída.",
+
+            files: convertedFiles.map((video) => ({
+                name: video.name,
+                downloadUrl:
+                    `/api/download/${encodeURIComponent(video.storedName)}`
+            }))
+        });
+
+    } catch (error) {
         console.error(
-            "ERRO NA CONVERSÃO:", e
+            "ERRO NA CONVERSÃO:",
+            error
         );
 
-        deleteFile(inputPath);
-        deleteFile(outputPath);
+        files.forEach((file) => {
+            deleteFile(file.path);
+        });
+
+        convertedFiles.forEach((video) => {
+            deleteFile(video.path);
+        });
 
         return res.status(500).json({
-            e: "Não foi possível converter o vídeo."
+            error: "Não foi possível converter os vídeos."
         });
     }
+}
+
+
+// OUTRA FUNÇÃO
+export function downloadVideo(
+    req: Request,
+    res: Response
+) {
+    const fileName =
+        path.basename(req.params.fileName as string);
+
+    const filePath = path.resolve(
+        "converted",
+        fileName
+    );
+
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({
+            error: "Arquivo não encontrado ou expirado."
+        });
+    }
+
+    return res.download(
+        filePath,
+        fileName,
+        (error) => {
+            if (error) {
+                console.error(
+                    "Erro durante o download:",
+                    error
+                );
+
+                return;
+            }
+
+            console.log(
+                `Download realizado: ${fileName}`
+            );
+        }
+    );
 }

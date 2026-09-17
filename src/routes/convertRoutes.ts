@@ -1,7 +1,10 @@
 import { Router } from "express";
 import multer from "multer";
 
-import { convertVideo } from "../controllers/convertController";
+import {
+    convertVideos,
+    downloadVideo
+} from "../controllers/convertController";
 
 const router = Router();
 
@@ -9,7 +12,8 @@ const upload = multer({
     dest: "uploads/",
 
     limits: {
-        fileSize: 500 * 1024 * 1024
+        fileSize: 500 * 1024 * 1024,
+        files: 10
     },
 
     fileFilter: (req, file, callback) => {
@@ -35,8 +39,13 @@ const upload = multer({
 
 router.post(
     "/convert",
-    upload.single("video"),
-    convertVideo
+    upload.array("videos", 10),
+    convertVideos
+);
+
+router.get(
+    "/download/:fileName",
+    downloadVideo
 );
 
 export default router;
